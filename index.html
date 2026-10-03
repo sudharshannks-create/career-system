@@ -1,169 +1,100 @@
-﻿```html
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>NextStep AI - AI Career Recommendation System</title>
 
   <meta
     name="description"
-    content="NextStep AI is an AI-powered career guidance platform for college students and job seekers. Get personalized career recommendations, skill gap analysis, and learning roadmaps."
-  />
+    content="NextStep AI is an AI-powered career guidance platform for college students and job seekers."
+  >
 
-  <!-- ============================= -->
   <!-- Google Fonts -->
-  <!-- ============================= -->
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
     rel="stylesheet"
-  />
+  >
 
-  <!-- ============================= -->
-  <!-- Lucide Icons -->
-  <!-- ============================= -->
+  <!-- Lucide -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-  <script
-    src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"
-  ></script>
-
-  <!-- ============================= -->
   <!-- Chart.js -->
-  <!-- ============================= -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-  <script
-    src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"
-  ></script>
+  <!-- CSS - ROOT FILE -->
+  <link rel="stylesheet" href="main.css">
 
-  <!-- ============================= -->
-  <!-- Main CSS -->
-  <!-- IMPORTANT:
-       main.css is in repository root
-  -->
-  <!-- ============================= -->
-
-  <link rel="stylesheet" href="main.css" />
-
-  <!-- ============================= -->
-  <!-- Google Identity Services -->
-  <!-- ============================= -->
-
+  <!-- Google Login -->
   <script
     src="https://accounts.google.com/gsi/client"
     async
     defer
   ></script>
 
-  <!-- ============================= -->
-  <!-- SheetJS - Excel Export -->
-  <!-- ============================= -->
-
-  <script
-    src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"
-  ></script>
+  <!-- Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 
 <body>
 
-  <!-- ============================= -->
-  <!-- Main Application -->
-  <!-- ============================= -->
-
   <div id="app">
 
-    <!-- Toast Notifications -->
     <div id="toast-container"></div>
 
-    <!-- Modal Container -->
     <div id="modal-container"></div>
 
-    <!-- Page Container -->
     <div id="page-container"></div>
 
   </div>
 
 
-  <!-- ============================= -->
-  <!-- Core JavaScript Files -->
-  <!-- These files are in repository root -->
-  <!-- ============================= -->
+  <!-- Core JavaScript -->
 
   <script src="data.js"></script>
-
   <script src="sheets-db.js"></script>
-
   <script src="auth.js"></script>
-
   <script src="router.js"></script>
-
   <script src="ui.js"></script>
-
   <script src="globals.js"></script>
 
 
-  <!-- ============================= -->
-  <!-- Pages Namespace -->
-  <!-- ============================= -->
+  <!-- Pages -->
 
   <script>
     const Pages = {};
   </script>
 
-
-  <!-- ============================= -->
-  <!-- Page JavaScript Files -->
-  <!-- All page files are in root -->
-  <!-- ============================= -->
-
   <script src="login.js"></script>
-
   <script src="register.js"></script>
-
   <script src="forgot-password.js"></script>
-
   <script src="dashboard.js"></script>
-
   <script src="profile.js"></script>
-
   <script src="assessment.js"></script>
-
   <script src="careers.js"></script>
-
   <script src="coach.js"></script>
-
   <script src="interview.js"></script>
-
   <script src="resume.js"></script>
-
   <script src="portfolio.js"></script>
-
   <script src="jobs.js"></script>
-
   <script src="admin.js"></script>
 
 
-  <!-- ============================= -->
   <!-- Excel -->
-  <!-- ============================= -->
 
   <script src="excel.js"></script>
 
 
-  <!-- ============================= -->
-  <!-- Main Application -->
-  <!-- ============================= -->
+  <!-- Main App -->
 
   <script src="app.js"></script>
 
 
-  <!-- ============================= -->
-  <!-- Initialize Lucide Icons -->
-  <!-- ============================= -->
+  <!-- Icons -->
 
   <script>
     document.addEventListener("DOMContentLoaded", function () {
@@ -175,4 +106,3 @@
 
 </body>
 </html>
-```
