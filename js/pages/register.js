@@ -143,7 +143,7 @@ Pages.register = function(container) {
 
         <div id="gsi-reg-slot" style="display:flex;justify-content:center;margin-bottom:10px"></div>
 
-        <button type="button" class="btn btn-google btn-full" onclick="Auth.showGoogleModal()">
+        <button type="button" class="btn btn-google btn-full" onclick="GoogleAuth.showModal()">
           <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.145 24.498c0-1.534-.138-3.01-.395-4.43H24v8.38h12.441c-.537 2.9-2.17 5.358-4.623 7.008v5.826h7.482c4.38-4.034 6.845-9.983 6.845-16.784z"/><path fill="#34A853" d="M24 47c6.24 0 11.47-2.069 15.3-5.618l-7.482-5.826C29.69 37.137 27.025 38 24 38c-6.025 0-11.13-4.068-12.952-9.537H3.383v6.015C7.19 42.655 15.002 47 24 47z"/><path fill="#FBBC05" d="M11.048 28.463A13.863 13.863 0 0110.4 24c0-1.545.265-3.046.648-4.463v-6.015H3.383A23.01 23.01 0 001 24c0 3.72.895 7.24 2.383 10.478l7.665-6.015z"/><path fill="#EA4335" d="M24 10c3.396 0 6.44 1.167 8.835 3.46l6.624-6.624C35.466 3.202 30.237 1 24 1 15.002 1 7.19 5.345 3.383 13.522l7.665 6.015C12.87 14.068 17.975 10 24 10z"/></svg>
           Continue with Google
         </button>
@@ -187,8 +187,8 @@ Pages.register = function(container) {
     el.addEventListener('keydown', e => { if (e.key === 'Enter') registerSubmit(); });
   });
 
-  if (Auth.getGoogleClientId()) {
-    setTimeout(() => Auth.initGoogleIdentity('gsi-reg-slot'), 200);
+  if (GoogleAuth.getClientId()) {
+    setTimeout(() => GoogleAuth.init('gsi-reg-slot'), 200);
   }
 };
 

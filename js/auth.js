@@ -377,29 +377,6 @@ const Auth = {
             </button>
           </div>
 
-          <!-- Custom Account expander -->
-          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
-            <div id="google-custom-trigger" style="display:flex;align-items:center;gap:12px;padding:8px;cursor:pointer;border-radius:8px;transition:all .2s" onclick="Auth.toggleCustomGoogleForm()">
-              <div style="width:34px;height:34px;border-radius:50%;background:var(--border-light);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex-shrink:0">
-                <i data-lucide="user-plus" style="width:16px;height:16px"></i>
-              </div>
-              <div style="font-size:0.875rem;font-weight:600;color:var(--primary)">Sign in with any Gmail address</div>
-            </div>
-
-            <div id="google-custom-form" style="display:none;margin-top:10px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px">
-              <div class="form-group mb-8">
-                <label class="form-label" style="font-size:.78rem">Full Name</label>
-                <input class="form-input" id="gauth-custom-name" placeholder="e.g. Rahul Sharma" style="background:#fff" />
-              </div>
-              <div class="form-group mb-12">
-                <label class="form-label" style="font-size:.78rem">Google / Gmail Address *</label>
-                <input class="form-input" type="email" id="gauth-custom-email" placeholder="e.g. rahul@gmail.com" style="background:#fff" />
-              </div>
-              <button class="btn btn-primary btn-full btn-sm" onclick="Auth.submitCustomGoogle()">
-                <i data-lucide="log-in" style="width:14px;height:14px"></i>Continue with this Google Account
-              </button>
-            </div>
-          </div>
         </div>
 
         <!-- TAB 2: REAL GOOGLE OAUTH 2.0 CLIENT CONFIGURATION -->
@@ -499,27 +476,7 @@ const Auth = {
     this.switchGoogleTab('signin');
   },
 
-  toggleCustomGoogleForm() {
-    const form = document.getElementById('google-custom-form');
-    if (!form) return;
-    const isHidden = form.style.display === 'none' || !form.style.display;
-    form.style.display = isHidden ? 'block' : 'none';
-    if (window.lucide) lucide.createIcons();
-    if (isHidden) {
-      setTimeout(() => document.getElementById('gauth-custom-email')?.focus(), 50);
-    }
-  },
 
-  async submitCustomGoogle() {
-    const email = document.getElementById('gauth-custom-email')?.value.trim();
-    const name  = document.getElementById('gauth-custom-name')?.value.trim();
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      UI.toast('Please enter a valid Google email address.', 'warning');
-      return;
-    }
-    await this.selectGoogleAccount({ name: name || email.split('@')[0], email });
-  },
 
   async selectGoogleAccount(accountData) {
     const wrap = document.getElementById('google-accounts-wrap');
