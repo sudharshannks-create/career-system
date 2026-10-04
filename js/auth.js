@@ -133,21 +133,12 @@ const Auth = {
   /* ══════════════════════════════════════════
      GOOGLE IDENTITY & OAUTH 2.0 AUTHENTICATION
      ══════════════════════════════════════════ */
-  GOOGLE_CLIENT_ID_KEY: 'nxt_google_client_id',
 
   getGoogleClientId() {
-    return localStorage.getItem(this.GOOGLE_CLIENT_ID_KEY) || window.GOOGLE_CLIENT_ID || '';
+    // Read-only: set via window.GOOGLE_CLIENT_ID in index.html
+    return (window.GOOGLE_CLIENT_ID || window.VITE_GOOGLE_CLIENT_ID || '').trim();
   },
 
-  setGoogleClientId(clientId) {
-    const cleanId = (clientId || '').trim();
-    if (cleanId) {
-      localStorage.setItem(this.GOOGLE_CLIENT_ID_KEY, cleanId);
-    } else {
-      localStorage.removeItem(this.GOOGLE_CLIENT_ID_KEY);
-    }
-    this.initGoogleIdentity();
-  },
 
   /* Parse JWT ID Token returned by Google Identity Services */
   parseJwt(token) {
@@ -545,16 +536,56 @@ const Auth = {
   },
 
   /* ══════════════════════════════════════════
-     GITHUB AUTHENTICATION & JWT VERIFICATION
+     GITHUB AUTHENTICATION & PROFILE CONNECT
      ══════════════════════════════════════════ */
 
   async loginWithGithub(githubData = {}, remember = true) {
-    const username = (githubData.username || githubData.login || 'developer').trim();
-    const email = (githubData.email || `${username.toLowerCase()}@users.noreply.github.com`).trim().toLowerCase();
-    const name  = (githubData.name || username).trim();
-    const avatar = githubData.avatar || `https://github.com/${username}.png`;
+    const rawUsername = (githubData.username || githubData.login || '').trim().replace(/^@/, '');
+    if (!rawUsername && !githubData.token) {
+      return { success: false, error: 'Please enter a valid GitHub username or token.' };
+    }
 
-    // 1. Verify with backend and obtain signed session JWT
+    let ghProfile = null;
+    let ghRepos   = [];
+
+    // 1. Fetch real GitHub public profile & repositories
+    try {
+      const headers = { 'Accept': 'application/vnd.github.v3+json' };
+      if (githubData.token) headers['Authorization'] = `Bearer ${githubData.token.trim()}`;
+
+      const userUrl = githubData.token
+        ? 'https://api.github.com/user'
+        : `https://api.github.com/users/${encodeURIComponent(rawUsername)}`;
+
+      const res = await fetch(userUrl, { headers });
+      if (res.ok) {
+        ghProfile = await res.json();
+      } else if (res.status === 404) {
+        return { success: false, error: `GitHub user @${rawUsername} was not found.` };
+      }
+
+      // Fetch user's top public repositories if available
+      const reposUrl = githubData.token
+        ? 'https://api.github.com/user/repos?sort=updated&per_page=6'
+        : `https://api.github.com/users/${encodeURIComponent(rawUsername)}/repos?sort=updated&per_page=6`;
+
+      const reposRes = await fetch(reposUrl, { headers });
+      if (reposRes.ok) {
+        ghRepos = await reposRes.json();
+      }
+    } catch (e) {
+      console.warn('[GitHubAuth] GitHub API fetch notice:', e.message);
+    }
+
+    const username = (ghProfile?.login || rawUsername || 'developer').trim();
+    const email    = (ghProfile?.email || githubData.email || `${username.toLowerCase()}@users.noreply.github.com`).trim().toLowerCase();
+    const name     = (ghProfile?.name || githubData.name || username).trim();
+    const avatar   = ghProfile?.avatar_url || githubData.avatar || `https://github.com/${username}.png`;
+    const location = ghProfile?.location || 'India';
+    const bio      = ghProfile?.bio || '';
+    const company  = ghProfile?.company || '';
+
+    // 2. Sync to SheetsDB if configured
     let backendResult = null;
     if (typeof SheetsDB !== 'undefined' && SheetsDB._isConfigured()) {
       try {
@@ -563,298 +594,187 @@ const Auth = {
           token: githubData.token || '',
           profile: { username, email, name, avatar }
         });
-        if (backendResult && backendResult.status === 'success' && backendResult.jwt) {
+        if (backendResult?.status === 'success' && backendResult.jwt) {
           this.setJwtToken(backendResult.jwt);
         }
       } catch (e) {
-        console.warn('Backend GitHub JWT verification warning:', e);
+        console.warn('[GitHubAuth] Backend verification warning:', e.message);
       }
     }
 
-    // 2. Add or update user locally
+    // 3. Find or Create User in Store
     let users = Store.getUsers();
-    let user = users.find(u => u.email.toLowerCase() === email || u.githubUsername === username);
+    let user  = users.find(u => u.email.toLowerCase() === email || u.githubUsername === username);
+    const isNew = !user;
 
-    if (!user) {
+    if (isNew) {
       user = {
-        id: Date.now(),
-        role: email.includes('admin') ? 'admin' : 'student',
-        name: name.replace(/\b\w/g, l => l.toUpperCase()),
-        email: email,
-        githubUsername: username,
-        phone: '+91 98765 00000',
-        password: 'ghauth_' + Math.random().toString(36).slice(2),
-        location: 'Bengaluru, Karnataka',
-        degree: 'B.Tech Information Technology',
-        department: 'Information Technology',
-        college: 'National Institute of Technology',
-        year: 3,
-        cgpa: 8.9,
+        id:                Date.now(),
+        role:              email.includes('admin') ? 'admin' : 'student',
+        name:              name.replace(/\b\w/g, l => l.toUpperCase()),
+        email:             email,
+        githubUsername:    username,
+        phone:             '+91 98765 43210',
+        password:          null,
+        location:          location,
+        degree:            'B.Tech / B.E. Computer Science',
+        department:        'Computer Science & Engineering',
+        college:           company ? company.replace(/^@/, '') : 'Anna University / Top Engineering College',
+        year:              3,
+        cgpa:              8.8,
         profileCompletion: 80,
-        assessmentScore: 85,
-        assessmentDone: true,
-        analysisRun: true,
-        avatar: avatar,
-        provider: 'github',
-        jwtToken: backendResult ? backendResult.jwt : null,
-        createdAt: new Date().toISOString()
+        profile_completed: true,
+        assessmentScore:   85,
+        assessmentDone:    true,
+        analysisRun:       true,
+        avatar:            avatar,
+        auth_provider:     'github',
+        provider:          'github',
+        jwtToken:          backendResult ? backendResult.jwt : null,
+        created_at:        new Date().toISOString(),
+        updated_at:        new Date().toISOString()
       };
 
-      Store.setUserSkills(user.id, [
-        { id: 1, name: 'Git & GitHub', category: 'DevOps', level: 'Advanced', verified: true },
-        { id: 2, name: 'JavaScript', category: 'Programming', level: 'Intermediate', verified: true },
-        { id: 3, name: 'Node.js', category: 'Backend', level: 'Intermediate', verified: true },
-        { id: 4, name: 'React', category: 'Frontend', level: 'Beginner', verified: false }
-      ]);
+      // Extract skills from repositories
+      const detectedLangs = new Set(['Git & GitHub']);
+      if (Array.isArray(ghRepos)) {
+        ghRepos.forEach(r => { if (r.language) detectedLangs.add(r.language); });
+      }
+      const initialSkills = Array.from(detectedLangs).map((lang, idx) => ({
+        id: idx + 1, name: lang, category: 'Technical', level: idx === 0 ? 'Advanced' : 'Intermediate', verified: true
+      }));
+      Store.setUserSkills(user.id, initialSkills);
+
+      // Extract projects from GitHub repositories
+      if (Array.isArray(ghRepos) && ghRepos.length > 0) {
+        const userProjects = ghRepos.slice(0, 4).map((r, idx) => ({
+          id: Date.now() + idx,
+          userId: user.id,
+          name: r.name.replace(/[-_]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          description: r.description || `Open source project on GitHub with ${r.stargazers_count || 0} stars.`,
+          technologies: [r.language || 'Code', 'Git', 'GitHub'],
+          role: 'Author / Maintainer',
+          duration: 'Active',
+          link: r.html_url
+        }));
+        Store.setUserProjects(user.id, userProjects);
+      }
 
       users.push(user);
       Store.setUsers(users);
+
     } else {
-      user.provider = 'github';
+      user.provider       = 'github';
+      user.auth_provider  = 'github';
       user.githubUsername = username;
       if (!user.avatar || (avatar && avatar.startsWith('http'))) user.avatar = avatar;
       if (backendResult?.jwt) user.jwtToken = backendResult.jwt;
+      user.updated_at = new Date().toISOString();
       Store.updateUser(user.id, user);
     }
 
     const session = this._makeSession(user);
     if (backendResult?.jwt) session.jwt = backendResult.jwt;
     this._saveSession(session, remember);
-    return { success: true, user: session, jwt: backendResult?.jwt };
+    return { success: true, user: session, isNew, jwt: backendResult?.jwt };
   },
 
   /* Show GitHub interactive login modal */
-  showGithubModal(initialTab = 'signin') {
+  showGithubModal() {
+    const ghSvg = `<svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+    </svg>`;
+
     const modalContent = `
-      <div class="google-auth-container" style="max-width:440px;margin:0 auto">
-        <!-- GitHub Header -->
-        <div class="google-auth-header" style="text-align:center;padding-bottom:10px">
-          <div style="width:48px;height:48px;background:#24292e;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15)">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-            </svg>
+      <div style="max-width:400px;margin:0 auto;font-family:'Inter',system-ui,sans-serif">
+        <div style="text-align:center;padding:6px 0 18px">
+          <div style="width:60px;height:60px;background:#24292e;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 4px 14px rgba(0,0,0,0.18)">
+            ${ghSvg}
           </div>
-          <h3 style="font-size:1.25rem;font-weight:700;margin:6px 0 2px;color:var(--text-primary)">GitHub Authentication</h3>
-          <p style="font-size:.85rem;color:var(--text-secondary);margin:0">Sign in & verify with <strong style="color:var(--primary)">Backend JWT Authorization</strong></p>
+          <h3 style="font-size:1.25rem;font-weight:700;color:var(--text-primary);margin:0 0 4px">Sign in with GitHub</h3>
+          <p style="font-size:.875rem;color:var(--text-secondary);margin:0">Continue to <strong style="color:var(--primary)">NextStep AI</strong></p>
         </div>
 
-        <!-- Navigation Tabs -->
-        <div class="tabs" style="margin:14px 0 16px">
-          <button type="button" class="tab-btn ${initialTab === 'signin' ? 'active' : ''}" id="gh-tab-signin" onclick="Auth.switchGithubTab('signin')">
-            🐙 Quick Accounts
-          </button>
-          <button type="button" class="tab-btn ${initialTab === 'token' ? 'active' : ''}" id="gh-tab-token" onclick="Auth.switchGithubTab('token')">
-            🔑 Personal Token / API
-          </button>
+        <div id="gh-loading-wrap" style="display:none;text-align:center;padding:24px 12px">
+          <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 12px;border-top-color:#24292e"></div>
+          <div style="font-weight:600;font-size:.9rem;color:var(--text-primary)">Connecting to GitHub API...</div>
+          <div style="font-size:.78rem;color:var(--text-secondary);margin-top:4px">Fetching profile & repositories</div>
         </div>
 
-        <!-- TAB 1: QUICK DEVELOPER ACCOUNTS -->
-        <div id="gh-pane-signin" style="${initialTab === 'signin' ? 'display:block' : 'display:none'}">
-          <div class="google-accounts-list" id="github-accounts-wrap">
-            <!-- Student / Dev 1 -->
-            <button type="button" class="google-account-btn" onclick="Auth.selectGithubAccount({ username:'sudharsan-dev', name:'SUDHARSAN K', email:'sudharsan@github.dev' })">
-              <div class="google-acc-avatar" style="background:#24292e;color:#fff">SK</div>
-              <div class="google-acc-details">
-                <div class="google-acc-name">SUDHARSAN K (@sudharsan-dev)</div>
-                <div class="google-acc-email">sudharsan@github.dev</div>
-              </div>
-              <span class="google-acc-badge" style="background:#e0e7ff;color:#4338ca">Verified</span>
-            </button>
-
-            <!-- Octocat Student -->
-            <button type="button" class="google-account-btn" onclick="Auth.selectGithubAccount({ username:'octocat', name:'The Octocat', email:'octocat@github.com' })">
-              <div class="google-acc-avatar" style="background:#0f172a;color:#fff">🐙</div>
-              <div class="google-acc-details">
-                <div class="google-acc-name">The Octocat (@octocat)</div>
-                <div class="google-acc-email">octocat@github.com</div>
-              </div>
-              <span class="google-acc-badge google-acc-badge-new">⚡ Instant</span>
-            </button>
-          </div>
-
-          <!-- Enter any GitHub username -->
-          <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px">
-            <div id="github-custom-trigger" style="display:flex;align-items:center;gap:12px;padding:8px;cursor:pointer;border-radius:8px;transition:all .2s" onclick="Auth.toggleCustomGithubForm()">
-              <div style="width:34px;height:34px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;color:#475569;flex-shrink:0">
-                <i data-lucide="user-plus" style="width:16px;height:16px"></i>
-              </div>
-              <div style="font-size:0.875rem;font-weight:600;color:var(--primary)">Sign in with your GitHub username</div>
-            </div>
-
-            <div id="github-custom-form" style="display:none;margin-top:10px;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px">
-              <div class="form-group mb-8">
-                <label class="form-label" style="font-size:.78rem">GitHub Username *</label>
-                <div class="input-group has-icon">
-                  <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;font-weight:600">@</span>
-                  <input class="form-input" id="gh-custom-username" placeholder="e.g. torvalds" style="background:#fff;padding-left:32px" />
-                </div>
-              </div>
-              <div class="form-group mb-12">
-                <label class="form-label" style="font-size:.78rem">Full Name (optional)</label>
-                <input class="form-input" id="gh-custom-name" placeholder="e.g. Linus Torvalds" style="background:#fff" />
-              </div>
-              <button class="btn btn-github btn-full btn-sm" onclick="Auth.submitCustomGithub()">
-                <i data-lucide="log-in" style="width:14px;height:14px"></i>Authorize & Issue JWT Token
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- TAB 2: PERSONAL ACCESS TOKEN -->
-        <div id="gh-pane-token" style="${initialTab === 'token' ? 'display:block' : 'display:none'}">
-          <div style="padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin-bottom:12px">
-            <p style="font-size:.78rem;color:var(--text-secondary);margin:0;line-height:1.5">
-              Enter your GitHub <strong>Personal Access Token (classic or fine-grained)</strong> with <code style="background:#e2e8f0;padding:2px 4px;border-radius:3px">read:user</code> scope. The backend verifies it against GitHub API and issues a signed JWT authorization token.
-            </p>
-          </div>
-
+        <div id="gh-form-body">
           <div class="form-group mb-12">
-            <label class="form-label" style="font-size:.8rem;font-weight:600">GitHub Personal Access Token</label>
-            <input class="form-input" type="password" id="gh-pat-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" style="font-size:.82rem" />
+            <label class="form-label" style="font-size:.82rem;font-weight:600">GitHub Username *</label>
+            <div class="input-group has-icon">
+              <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#94a3b8;font-weight:700;font-size:1rem">@</span>
+              <input class="form-input" id="gh-login-username" placeholder="e.g. torvalds or your-handle" style="padding-left:34px" />
+            </div>
           </div>
 
-          <button class="btn btn-github btn-full btn-sm" id="gh-verify-token-btn" onclick="Auth.verifyGithubPersonalToken()">
-            <i data-lucide="shield-check" style="width:14px;height:14px"></i>Verify Token & Sign In
+          <div class="form-group mb-16">
+            <label class="form-label" style="font-size:.82rem;font-weight:600;display:flex;justify-content:space-between">
+              <span>Personal Access Token <span style="font-weight:400;color:var(--text-muted)">(optional)</span></span>
+              <a href="https://github.com/settings/tokens" target="_blank" style="font-size:.75rem;color:var(--primary);text-decoration:underline">Get Token &rarr;</a>
+            </label>
+            <input class="form-input" type="password" id="gh-login-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx (optional for private email)" style="font-size:.82rem" />
+          </div>
+
+          <button type="button" class="btn btn-github btn-full btn-lg" id="gh-submit-btn" onclick="Auth.handleGithubConnectSubmit()">
+            ${ghSvg} Continue with GitHub
           </button>
 
-          <div style="margin-top:14px;font-size:0.75rem;color:var(--text-muted);text-align:center">
-            Need a token? <a href="https://github.com/settings/tokens" target="_blank" style="color:var(--primary);text-decoration:underline">Generate on GitHub &rarr;</a>
+          <div style="text-align:center;font-size:.75rem;color:var(--text-muted);margin-top:16px;line-height:1.4">
+            <i data-lucide="shield-check" style="width:12px;height:12px;vertical-align:middle;display:inline-block"></i>
+            Syncs verified GitHub profile & top repositories automatically.
           </div>
-        </div>
-
-        <div style="margin-top:14px;font-size:0.75rem;color:var(--text-muted);text-align:center;line-height:1.4">
-          Protected by HMAC-SHA256 Backend JWT Authorization.
         </div>
       </div>
     `;
 
     UI.modal('GitHub Authentication', modalContent);
     if (window.lucide) lucide.createIcons();
+
+    setTimeout(() => {
+      const input = document.getElementById('gh-login-username');
+      if (input) {
+        input.focus();
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') Auth.handleGithubConnectSubmit(); });
+      }
+    }, 100);
   },
 
-  switchGithubTab(tab) {
-    const signinPane = document.getElementById('gh-pane-signin');
-    const tokenPane  = document.getElementById('gh-pane-token');
-    const signinBtn  = document.getElementById('gh-tab-signin');
-    const tokenBtn   = document.getElementById('gh-tab-token');
+  async handleGithubConnectSubmit() {
+    const userEl  = document.getElementById('gh-login-username');
+    const tokenEl = document.getElementById('gh-login-token');
+    const username = (userEl?.value || '').trim().replace(/^@/, '');
+    const token    = (tokenEl?.value || '').trim();
 
-    if (tab === 'signin') {
-      if (signinPane) signinPane.style.display = 'block';
-      if (tokenPane)  tokenPane.style.display = 'none';
-      signinBtn?.classList.add('active');
-      tokenBtn?.classList.remove('active');
-    } else {
-      if (signinPane) signinPane.style.display = 'none';
-      if (tokenPane)  tokenPane.style.display = 'block';
-      signinBtn?.classList.remove('active');
-      tokenBtn?.classList.add('active');
-    }
-  },
-
-  toggleCustomGithubForm() {
-    const form = document.getElementById('github-custom-form');
-    if (!form) return;
-    const isHidden = form.style.display === 'none' || !form.style.display;
-    form.style.display = isHidden ? 'block' : 'none';
-    if (window.lucide) lucide.createIcons();
-    if (isHidden) {
-      setTimeout(() => document.getElementById('gh-custom-username')?.focus(), 50);
-    }
-  },
-
-  async submitCustomGithub() {
-    const username = document.getElementById('gh-custom-username')?.value.trim().replace(/^@/, '');
-    const name     = document.getElementById('gh-custom-name')?.value.trim();
-
-    if (!username) {
+    if (!username && !token) {
       UI.toast('Please enter your GitHub username.', 'warning');
+      userEl?.focus();
       return;
     }
-    await this.selectGithubAccount({ username, name: name || username });
-  },
 
-  async selectGithubAccount(accountData) {
-    const wrap = document.getElementById('github-accounts-wrap');
-    if (wrap) {
-      wrap.innerHTML = `
-        <div style="text-align:center;padding:26px 12px">
-          <div class="spinner" style="width:34px;height:34px;border-width:3px;margin:0 auto 14px;border-top-color:#24292e"></div>
-          <div style="font-weight:600;font-size:.95rem;color:var(--text-primary)">Authorizing with GitHub...</div>
-          <div style="font-size:.8rem;color:var(--text-secondary);margin-top:4px">@${accountData.username} · Generating Backend JWT Token</div>
-        </div>
-      `;
-    }
+    const formBody = document.getElementById('gh-form-body');
+    const loadingWrap = document.getElementById('gh-loading-wrap');
+    if (formBody) formBody.style.display = 'none';
+    if (loadingWrap) loadingWrap.style.display = 'block';
 
     try {
-      const res = await this.loginWithGithub(accountData, true);
-      setTimeout(() => {
+      const result = await this.loginWithGithub({ username, token }, true);
+      if (result.success) {
         UI.closeModal();
-        if (res.success) {
-          const jwtStatus = res.jwt ? ' (JWT Authorized ✓)' : '';
-          UI.toast(`Welcome back, ${res.user.name.split(' ')[0]}! Signed in with GitHub${jwtStatus} 🚀`, 'success');
-          Router.navigate(res.user.role === 'admin' ? 'admin' : 'dashboard');
-        } else {
-          UI.toast(res.error || 'GitHub login failed.', 'error');
-        }
-      }, 500);
-    } catch (err) {
-      console.error('GitHub auth error:', err);
-      UI.closeModal();
-      UI.toast('An error occurred during GitHub login. Please try again.', 'error');
-    }
-  },
-
-  async verifyGithubPersonalToken() {
-    const tokenInput = document.getElementById('gh-pat-input');
-    const token = tokenInput ? tokenInput.value.trim() : '';
-
-    if (!token) {
-      UI.toast('Please paste your GitHub Personal Access Token.', 'warning');
-      return;
-    }
-
-    const btn = document.getElementById('gh-verify-token-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;vertical-align:middle;margin-right:6px"></div> Verifying with GitHub & Backend...';
-    }
-
-    try {
-      // 1. Direct verify with GitHub API to get authenticated user
-      const ghRes = await fetch('https://api.github.com/user', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!ghRes.ok) {
-        throw new Error('Invalid GitHub token. Please verify token permissions and expiration.');
-      }
-
-      const ghUser = await ghRes.json();
-      
-      // 2. Pass token and verified profile to backend for JWT issuance
-      const loginRes = await this.loginWithGithub({
-        username: ghUser.login,
-        name: ghUser.name || ghUser.login,
-        email: ghUser.email || `${ghUser.login}@users.noreply.github.com`,
-        avatar: ghUser.avatar_url,
-        token: token
-      }, true);
-
-      UI.closeModal();
-      if (loginRes.success) {
-        UI.toast(`Welcome, ${loginRes.user.name}! Verified GitHub Token & JWT Authorized 🎉`, 'success');
-        Router.navigate(loginRes.user.role === 'admin' ? 'admin' : 'dashboard');
+        UI.toast(`Welcome, ${result.user.name.split(' ')[0]}! Signed in with GitHub 🐙`, 'success');
+        Router.navigate(result.user.role === 'admin' ? 'admin' : 'dashboard');
       } else {
-        UI.toast(loginRes.error || 'Login failed.', 'error');
+        if (formBody) formBody.style.display = 'block';
+        if (loadingWrap) loadingWrap.style.display = 'none';
+        UI.toast(result.error || 'GitHub authentication failed.', 'error');
       }
-    } catch (err) {
-      console.error('GitHub token verification error:', err);
-      UI.toast(err.message || 'Token verification failed. Please try again.', 'error');
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i data-lucide="shield-check" style="width:14px;height:14px"></i>Verify Token & Sign In';
-        if (window.lucide) lucide.createIcons();
-      }
+    } catch (e) {
+      console.error('[GitHubAuth] Login error:', e);
+      if (formBody) formBody.style.display = 'block';
+      if (loadingWrap) loadingWrap.style.display = 'none';
+      UI.toast('An error occurred during GitHub login. Please try again.', 'error');
     }
   },
 

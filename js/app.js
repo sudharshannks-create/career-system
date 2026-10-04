@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Router.register('login',            Pages.login);
   Router.register('register',         Pages.register);
   Router.register('forgot-password',  Pages.forgotPassword);
+  Router.register('career-setup',     Pages.careerSetup);
   Router.register('dashboard',        Pages.dashboard);
   Router.register('profile',          Pages.profile);
   Router.register('assessment',       Pages.assessment);
@@ -40,7 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   console.log('%c🚀 NextStep AI', 'color:#4f46e5;font-size:18px;font-weight:900');
   console.log('%cYour AI-powered path to the right career.', 'color:#7c3aed;font-size:12px');
-  console.log('%cDemo Accounts:\n• Student: sudharsan@example.com / demo123\n• Admin: admin@nextstep.ai / admin123', 'color:#64748b;font-size:11px');
 });
 
 // ─── Quick action hover effect ───────────────

@@ -42,13 +42,31 @@
   <link rel="stylesheet" href="css/main.css" />
 
   <!-- ============================= -->
-  <!-- Google Identity Services -->
+  <!-- ============================= -->
+  <!-- Environment Configuration     -->
+  <!-- ============================= -->
+  <script src="js/env.js"></script>
+  <script type="module">
+    // Vite environment variable bridge
+    try {
+      if (typeof import.meta !== 'undefined' && import.meta && import.meta.env) {
+        if (import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+          window.VITE_GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+          if (window.ENV) window.ENV.VITE_GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+        }
+      }
+    } catch (e) {}
+  </script>
+
+  <!-- ============================= -->
+  <!-- Google Identity Services      -->
   <!-- ============================= -->
 
   <script
     src="https://accounts.google.com/gsi/client"
     async
     defer
+    onload="window.__gsiLoaded = true; if (window.GoogleAuth && window.GoogleAuth.onGsiLoaded) window.GoogleAuth.onGsiLoaded();"
   ></script>
 
   <!-- ============================= -->
@@ -118,6 +136,8 @@
   <script src="js/pages/forgot-password.js"></script>
 
   <script src="js/pages/dashboard.js"></script>
+
+  <script src="js/pages/career-setup.js"></script>
 
   <script src="js/pages/profile.js"></script>
 

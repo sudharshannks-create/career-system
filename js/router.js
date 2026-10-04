@@ -19,13 +19,15 @@ const Router = {
     if (!handler) { this.navigate('login'); return; }
 
     // Auth guards
-    const publicRoutes = ['login', 'register', 'forgot-password'];
+    const publicRoutes  = ['login', 'register', 'forgot-password'];
+    const noNavRoutes   = ['login', 'register', 'forgot-password', 'career-setup'];
     if (!publicRoutes.includes(route) && !Auth.isLoggedIn()) { this.navigate('login'); return; }
     if (route === 'admin' && !Auth.isAdmin()) { this.navigate('dashboard'); return; }
 
-    // Render navbar
+    // Render navbar (hidden on auth pages and career-setup)
     const navEl = document.getElementById('app-navbar');
-    if (!publicRoutes.includes(route)) {
+    if (!noNavRoutes.includes(route)) {
+
       if (!navEl) {
         const nav = document.createElement('div');
         nav.id = 'app-navbar';

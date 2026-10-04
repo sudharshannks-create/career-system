@@ -1,4 +1,6 @@
 /**
+ * 
+ * 
  * ============================================================
  * NextStep AI - Google Apps Script Web App API + JWT Auth
  * ============================================================
@@ -14,7 +16,7 @@
 // If your script is created via "Extensions > Apps Script" inside your Google Sheet,
 // you can leave SPREADSHEET_ID empty ("").
 // If you created a standalone script, paste your Google Sheet ID inside the quotes:
-var SPREADSHEET_ID = ""; 
+var SPREADSHEET_ID = "";
 
 // Tab name inside your spreadsheet:
 var SHEET_NAME = "Users";
@@ -40,7 +42,7 @@ var HEADERS = [
  */
 function doGet(e) {
   var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "";
-  
+
   // If ?action=verify&token=... test JWT token directly
   if (action === "verify" && e.parameter.token) {
     var check = verifySignedJwt(e.parameter.token, JWT_SECRET);
@@ -93,15 +95,15 @@ function doPost(e) {
       // Verify Google ID Token with Google's public OAuth2 tokeninfo API
       var googleVerifyRes = verifyGoogleIdToken(googleIdToken);
       if (!googleVerifyRes.valid) {
-        return createJsonResponse({ 
-          status: "error", 
-          message: "Google JWT signature verification failed: " + googleVerifyRes.error 
+        return createJsonResponse({
+          status: "error",
+          message: "Google JWT signature verification failed: " + googleVerifyRes.error
         });
       }
 
       var gUser = googleVerifyRes.payload;
       var email = (gUser.email || "").toLowerCase();
-      var name  = gUser.name || gUser.given_name || email.split("@")[0];
+      var name = gUser.name || gUser.given_name || email.split("@")[0];
 
       // Auto-save user to Google Sheets if not already present
       syncUserToSheet(name, email, "Google OAuth");
@@ -195,18 +197,18 @@ function doPost(e) {
     var sheet = getOrCreateUsersSheet();
 
     // Sanitize non-sensitive user fields (NEVER STORE PASSWORDS)
-    var fullName   = (rawData.fullName || rawData.name || "").toString().trim();
-    var email      = (rawData.email || "").toString().trim().toLowerCase();
-    var phone      = (rawData.phone || rawData.phoneNumber || "").toString().trim();
-    var location   = (rawData.location || "").toString().trim();
-    var education  = (rawData.education || rawData.degree || "").toString().trim();
+    var fullName = (rawData.fullName || rawData.name || "").toString().trim();
+    var email = (rawData.email || "").toString().trim().toLowerCase();
+    var phone = (rawData.phone || rawData.phoneNumber || "").toString().trim();
+    var location = (rawData.location || "").toString().trim();
+    var education = (rawData.education || rawData.degree || "").toString().trim();
     var department = (rawData.department || "").toString().trim();
-    var year       = (rawData.year || rawData.yearOfStudy || "").toString().trim();
-    var cgpa       = (rawData.cgpa !== undefined && rawData.cgpa !== null) ? rawData.cgpa.toString().trim() : "";
-    var createdAt  = new Date().toLocaleString("en-US", { timeZone: Session.getScriptTimeZone() || "UTC" });
+    var year = (rawData.year || rawData.yearOfStudy || "").toString().trim();
+    var cgpa = (rawData.cgpa !== undefined && rawData.cgpa !== null) ? rawData.cgpa.toString().trim() : "";
+    var createdAt = new Date().toLocaleString("en-US", { timeZone: Session.getScriptTimeZone() || "UTC" });
 
     if (!fullName) return createJsonResponse({ status: "error", message: "Full Name is required." });
-    if (!email)    return createJsonResponse({ status: "error", message: "Email is required." });
+    if (!email) return createJsonResponse({ status: "error", message: "Email is required." });
 
     // Check duplicate email
     var lastRow = sheet.getLastRow();
@@ -214,9 +216,9 @@ function doPost(e) {
       var emailValues = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
       for (var i = 0; i < emailValues.length; i++) {
         if (emailValues[i][0] && emailValues[i][0].toString().trim().toLowerCase() === email) {
-          return createJsonResponse({ 
-            status: "error", 
-            message: "An account with this email (" + email + ") already exists." 
+          return createJsonResponse({
+            status: "error",
+            message: "An account with this email (" + email + ") already exists."
           });
         }
       }
@@ -258,7 +260,7 @@ function doPost(e) {
 function createSignedJwt(payloadObj, secret, expiresInSeconds) {
   var header = { alg: "HS256", typ: "JWT" };
   var now = Math.floor(Date.now() / 1000);
-  
+
   payloadObj.iat = now;
   if (expiresInSeconds) {
     payloadObj.exp = now + expiresInSeconds;
