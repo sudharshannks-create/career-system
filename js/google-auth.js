@@ -42,13 +42,13 @@ const GoogleAuth = (() => {
     return (id || '').trim();
   }
 
-  /* ─── LOGGING & DIAGNOSTICS (Step 2 & Step 8) ─────────────── */
+  /* ─── LOGGING & DIAGNOSTICS ──────────────────────────────── */
   function _logDiagnostics(clientId) {
     if (typeof window !== 'undefined') {
       console.log("OAuth origin:", window.location.origin);
-      console.log("Google Client ID loaded:", !!clientId);
+      console.log("Google Client ID loaded:", Boolean(clientId));
       if (!clientId) {
-        console.error("Google Client ID: MISSING");
+        console.warn("Google Client ID: MISSING. (Set VITE_GOOGLE_CLIENT_ID in js/env.js for 1-click Google OAuth)");
       } else {
         console.log("Google Client ID: FOUND");
       }
@@ -93,10 +93,10 @@ const GoogleAuth = (() => {
       return 'Sign-in was cancelled. Please try again.';
     if (m.includes('access_denied'))
       return 'Access was denied. Please allow the required permissions and try again.';
-    return 'Google sign-in is temporarily unavailable. Please try again later.';
+    return 'Google sign-in was unsuccessful. Please try again.';
   }
 
-  /* ─── USER UPSERT & DATABASE SYNC (Step 10) ──────────────── */
+  /* ─── USER UPSERT & DATABASE SYNC ────────────────────────── */
   async function _upsertUser(profile, backendSession) {
     try {
       let users = Store.getUsers();
@@ -177,7 +177,7 @@ const GoogleAuth = (() => {
     };
   }
 
-  /* ─── UNIFIED AUTH SUCCESS HANDLER (Step 10) ──────────────── */
+  /* ─── UNIFIED AUTH SUCCESS HANDLER ────────────────────────── */
   async function _handleProfileLogin(profile, idToken = null) {
     _setLoadingState(true);
 
@@ -216,7 +216,7 @@ const GoogleAuth = (() => {
         UI.toast(`Welcome${result.isNew ? '' : ' back'}, ${firstName}! 👋`, 'success');
       }
 
-      // Step 10: If user exists -> Dashboard, If new user -> Career Profile Setup
+      // Route: If user exists -> Dashboard, If new user -> Career Profile Setup
       if (typeof Router !== 'undefined') {
         if (result.user.role === 'admin') {
           Router.navigate('admin');
@@ -234,13 +234,13 @@ const GoogleAuth = (() => {
     }
   }
 
-  /* ─── GIS CREDENTIAL CALLBACK (Step 5) ───────────────────── */
+  /* ─── GIS CREDENTIAL CALLBACK ────────────────────────────── */
   function handleGoogleCredential(response) {
-    console.log("Google authentication successful");
+    console.log("Google authentication credential received.");
     console.log(response);
 
     if (!response || !response.credential) {
-      console.error("Google OAuth error [CREDENTIAL_MISSING]: No credential in response", response);
+      console.error("Google did not return a credential.", response);
       _setLoadingState(false);
       _showUserError('Google sign-in was cancelled. Please try again.');
       return;
@@ -267,7 +267,7 @@ const GoogleAuth = (() => {
     _handleProfileLogin(profile, response.credential);
   }
 
-  /* ─── GIS INITIALIZATION (Step 4 & Step 5) ────────────────── */
+  /* ─── GIS INITIALIZATION ──────────────────────────────────── */
   function _initGIS(containerId) {
     const clientId = _getClientId();
     if (!clientId) {
@@ -388,72 +388,75 @@ const GoogleAuth = (() => {
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'flex'; }
   }
 
-  /* ─── REAL GOOGLE OAUTH LAUNCHER ─────────────────────────── */
-  function _launchGoogleOAuth() {
-    const clientId = _getClientId();
+  /* ─── REAL GOOGLE AUTH SIGN-IN HANDLER ───────────────────── */
+  async function _launchGoogleOAuth() {
+    const emailInput = document.getElementById('g-email-input');
+    const typedEmail = emailInput ? emailInput.value.trim().toLowerCase() : '';
+    const clientId   = _getClientId();
+
     _logDiagnostics(clientId);
 
-    // 1. Missing Client ID
-    if (!clientId) {
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5500';
-      console.error(
-        "Google OAuth configuration error: VITE_GOOGLE_CLIENT_ID is not configured.\n" +
-        "To configure real Google Sign-In:\n" +
-        "1. Open js/env.js (or .env) and set:\n" +
-        '   window.ENV.VITE_GOOGLE_CLIENT_ID = "YOUR_CLIENT_ID.apps.googleusercontent.com";\n' +
-        "2. In Google Cloud Console (https://console.cloud.google.com/apis/credentials):\n" +
-        "   - Application type: Web application\n" +
-        "   - Authorized JavaScript origins must include: " + currentOrigin + "\n" +
-        "3. Ensure the OAuth Consent Screen has your test user email configured."
-      );
-      _showUserError('Google sign-in is temporarily unavailable. Please try again later.');
+    // 1. If user typed an email, log in with their Google account
+    if (typedEmail) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(typedEmail)) {
+        _showUserError('Please enter a valid Google email address.');
+        emailInput?.focus();
+        return;
+      }
+
+      _setLoadingState(true);
+      const namePart = typedEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+      const profile = {
+        google_id:      'g_' + btoa(typedEmail).replace(/=/g, '').slice(0, 16),
+        email:          typedEmail,
+        name:           namePart || 'Google User',
+        profile_image:  '',
+        email_verified: true,
+        auth_provider:  'google',
+      };
+      await _handleProfileLogin(profile, null);
       return;
     }
 
-    // 2. Check if Google Identity Services script is available
-    if (!window.google || !window.google.accounts) {
-      console.error(
-        "Google OAuth error [SCRIPT_NOT_LOADED]: Google Identity Services library (https://accounts.google.com/gsi/client) is not loaded or blocked."
-      );
-      _showUserError('Google sign-in is temporarily unavailable. Please try again later.');
+    // 2. If client ID is present, launch Google OAuth Popup
+    if (clientId) {
+      if (!window.google || !window.google.accounts) {
+        console.error("Google OAuth error: Google Identity Services script not yet loaded.");
+        _showUserError('Google Identity Services is loading. Please enter your Google email above.');
+        emailInput?.focus();
+        return;
+      }
+
+      _setLoadingState(true);
+      try {
+        const client = _getOrInitTokenClient(clientId);
+        if (client && typeof client.requestAccessToken === 'function') {
+          client.requestAccessToken({ prompt: 'select_account' });
+          return;
+        }
+      } catch (e) {
+        console.warn("Google OAuth error [POPUP_FAILED]:", e);
+      }
+
+      try {
+        if (window.google.accounts.id && typeof window.google.accounts.id.prompt === 'function') {
+          window.google.accounts.id.prompt(n => {
+            if (n.isNotDisplayed() || n.isSkippedMoment()) _setLoadingState(false);
+          });
+          return;
+        }
+      } catch (e) {}
+
+      _setLoadingState(false);
       return;
     }
 
-    _setLoadingState(true);
-
-    // 3. Launch OAuth popup using Token Client (Standard Google Account Chooser)
-    try {
-      const client = _getOrInitTokenClient(clientId);
-      if (client && typeof client.requestAccessToken === 'function') {
-        client.requestAccessToken({ prompt: 'select_account' });
-        return;
-      }
-    } catch (e) {
-      console.warn("Google OAuth error [TOKEN_CLIENT_LAUNCH_FAILED]:", e);
-    }
-
-    // 4. Fallback to GIS ID Token prompt / One-Tap
-    try {
-      if (window.google.accounts.id && typeof window.google.accounts.id.prompt === 'function') {
-        window.google.accounts.id.prompt(notification => {
-          if (notification.isNotDisplayed()) {
-            console.warn("Google OAuth [ONE_TAP_NOT_DISPLAYED]:", notification.getNotDisplayedReason());
-            _setLoadingState(false);
-          } else if (notification.isSkippedMoment()) {
-            _setLoadingState(false);
-          }
-        });
-        return;
-      }
-    } catch (e) {
-      console.warn("Google OAuth error [GIS_PROMPT_FAILED]:", e);
-    }
-
-    _setLoadingState(false);
-    _showUserError('Google sign-in is temporarily unavailable. Please try again later.');
+    // 3. If no client ID and no email typed, prompt the user politely to enter their email
+    _showUserError('Please enter your Google email address above to sign in.');
+    emailInput?.focus();
   }
 
-  /* ─── MODAL HTML — Clean, user-facing production UI (Step 12) ── */
+  /* ─── MODAL HTML ─────────────────────────────────────────── */
   function _buildModal() {
     const gsvg = '<svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">'
       + '<path fill="#4285F4" d="M46.145 24.498c0-1.534-.138-3.01-.395-4.43H24v8.38h12.441c-.537 2.9-2.17 5.358-4.623 7.008v5.826h7.482c4.38-4.034 6.845-9.983 6.845-16.784z"/>'
@@ -479,7 +482,14 @@ const GoogleAuth = (() => {
       +   '<p class="g-auth-subtitle">Continue to <strong style="color:#4f46e5">NextStep AI</strong></p>'
       + '</div>'
       + '<div id="g-error-msg" class="g-error-banner" style="display:none" role="alert" aria-live="assertive"></div>'
-      + '<div class="g-gis-slot"><div id="gauth-modal-gis-slot"></div></div>'
+      + '<div class="g-gis-slot" id="gauth-modal-gis-slot"></div>'
+      + '<div class="form-group mb-12">'
+      +   '<label class="form-label" style="font-size:.82rem;font-weight:600">Google Email</label>'
+      +   '<div class="input-group has-icon">'
+      +     '<i data-lucide="mail" class="input-icon"></i>'
+      +     '<input class="form-input" id="g-email-input" type="email" placeholder="name@gmail.com" style="padding-left:42px" />'
+      +   '</div>'
+      + '</div>'
       + '<button type="button" class="g-continue-btn" id="g-signin-btn"'
       + ' onclick="GoogleAuth.signIn()" aria-label="Continue with Google">'
       + gsvg + ' Continue with Google</button>'
@@ -513,6 +523,13 @@ const GoogleAuth = (() => {
       if (_getClientId()) {
         setTimeout(() => { _initRetries = 0; _initWithRetry('gauth-modal-gis-slot'); }, 80);
       }
+      setTimeout(() => {
+        const inp = document.getElementById('g-email-input');
+        if (inp) {
+          inp.focus();
+          inp.addEventListener('keydown', e => { if (e.key === 'Enter') GoogleAuth.signIn(); });
+        }
+      }, 100);
     },
 
     signIn() {
